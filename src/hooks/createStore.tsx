@@ -1,14 +1,14 @@
-import React, {createContext, useMemo, useReducer, useContext} from 'react';
+import React, {createContext, useReducer, useContext} from 'react';
 
 function createStore<
   S extends object,
   M extends {
     [action: string]: (state: S, payload: any) => void;
   }
->(
-  state: S,
-  mutations: M,
-): {
+>(initial: {
+  state: S;
+  mutations?: M;
+}): {
   useStore: () => {
     get: S;
     commit: <A extends keyof M, P extends Parameters<M[A]>[1]>(
@@ -18,20 +18,27 @@ function createStore<
   };
   StoreContainer: React.FC;
 } {
-  const StoreContext = createContext<{
+  type Response = {
     get: S;
     commit: <A extends keyof M, P extends Parameters<M[A]>[1]>(
       action: A,
       payload?: P,
     ) => void;
-  }>({
+  };
+
+  const {state, mutations} = initial;
+
+  const StoreContext = createContext<Response>({
     get: {...state},
     commit: () => {},
   });
 
   const reducer = (
     currState: S,
-    [action, payload]: [keyof M, Parameters<M[keyof M]>[1]],
+    [action, payload]: [
+      Parameters<Response['commit']>[0],
+      Parameters<Response['commit']>[1],
+    ],
   ): S => {
     const nextState = {...currState};
     const {[action]: mutate} = mutations;
@@ -42,17 +49,18 @@ function createStore<
     return nextState;
   };
 
-  const ProvideComponent: React.FC = ({children}) => {
+  const StoreContainer: React.FC = ({children}) => {
     const [reducerState, reducerDispatch] = useReducer(reducer, state);
+
     const context = {
       get: reducerState,
       commit: (action: keyof M, payload: Parameters<M[keyof M]>[1]) => {
         reducerDispatch([action, payload]);
       },
     };
-    const value = useMemo(() => context, [context]);
+
     return (
-      <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
+      <StoreContext.Provider value={context}>{children}</StoreContext.Provider>
     );
   };
 
@@ -61,7 +69,7 @@ function createStore<
   };
   return {
     useStore,
-    StoreContainer: ProvideComponent,
+    StoreContainer,
   };
 }
 
